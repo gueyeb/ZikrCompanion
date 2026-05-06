@@ -1,0 +1,60 @@
+import SwiftUI
+
+// MARK: - NiyyaView (écran d'intention / onboarding léger)
+
+struct NiyyaView: View {
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        ZStack {
+            AppTheme.background.ignoresSafeArea()
+
+            VStack(spacing: AppTheme.paddingL) {
+                Spacer()
+
+                // Icône
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(AppTheme.gold)
+
+                // Titre arabic
+                Text("نِيَّة")
+                    .font(.system(size: 48, weight: .thin, design: .default))
+                    .foregroundStyle(AppTheme.gold)
+
+                Text("Intention")
+                    .font(AppTheme.titleFont)
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                Text("Renouvelle ton intention avant de commencer.\nChaque dhikr compte pour Allah.")
+                    .font(AppTheme.bodyFont)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppTheme.paddingXL)
+
+                Spacer()
+
+                // CTA
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isPresented = false
+                    }
+                } label: {
+                    Text("Commencer")
+                        .font(AppTheme.headlineFont)
+                        .foregroundStyle(AppTheme.background)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, AppTheme.paddingM)
+                        .background(AppTheme.gold)
+                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusM))
+                }
+                .padding(.horizontal, AppTheme.paddingL)
+                .padding(.bottom, AppTheme.paddingXL)
+            }
+        }
+    }
+}
+
+#Preview {
+    NiyyaView(isPresented: .constant(true))
+}
