@@ -19,12 +19,13 @@ final class SessionStore: ObservableObject {
     // MARK: - UserDefaults keys
 
     private enum Keys {
-        static let count          = "zc_count"
-        static let streak         = "zc_streak"
+        static let count           = "zc_count"
+        static let countDate       = "zc_countDate"
+        static let streak          = "zc_streak"
         static let lastSessionDate = "zc_lastSessionDate"
         static let selectedRoutine = "zc_selectedRoutine"
-        static let reminderHour   = "zc_reminderHour"
-        static let reminderMinute = "zc_reminderMinute"
+        static let reminderHour    = "zc_reminderHour"
+        static let reminderMinute  = "zc_reminderMinute"
         static let reminderEnabled = "zc_reminderEnabled"
     }
 
@@ -48,6 +49,14 @@ final class SessionStore: ObservableObject {
             completeSession()
         }
         return count
+    }
+
+    /// Décrémente le compteur de 1 (mode chapelet).
+    func decrement() {
+        guard count > 0 else { return }
+        count -= 1
+        if isSessionComplete { isSessionComplete = false }
+        saveCount()
     }
 
     /// Remet le compteur à zéro sans toucher au streak.
@@ -92,7 +101,17 @@ final class SessionStore: ObservableObject {
     // MARK: - Persistence
 
     private func load() {
-        count = defaults.integer(forKey: Keys.count)
+        let today = Calendar.current.startOfDay(for: Date())
+
+        // Reset count if it was saved on a previous day
+        let savedCount = defaults.integer(forKey: Keys.count)
+        if let countDate = defaults.object(forKey: Keys.countDate) as? Date {
+            let savedDay = Calendar.current.startOfDay(for: countDate)
+            count = savedDay < today ? 0 : savedCount
+        } else {
+            count = savedCount
+        }
+
         streak = defaults.integer(forKey: Keys.streak)
 
         if let raw = defaults.string(forKey: Keys.selectedRoutine),
@@ -100,14 +119,13 @@ final class SessionStore: ObservableObject {
             selectedRoutine = routine
         }
 
-        reminderHour   = defaults.object(forKey: Keys.reminderHour) as? Int ?? 7
-        reminderMinute = defaults.object(forKey: Keys.reminderMinute) as? Int ?? 0
+        reminderHour      = defaults.object(forKey: Keys.reminderHour) as? Int ?? 7
+        reminderMinute    = defaults.object(forKey: Keys.reminderMinute) as? Int ?? 0
         isReminderEnabled = defaults.bool(forKey: Keys.reminderEnabled)
 
         // Restitue l'état de complétion si déjà fait aujourd'hui
         if let lastDate = defaults.object(forKey: Keys.lastSessionDate) as? Date {
-            let today = Calendar.current.startOfDay(for: Date())
-            let last  = Calendar.current.startOfDay(for: lastDate)
+            let last = Calendar.current.startOfDay(for: lastDate)
             if last == today && count >= selectedRoutine.target {
                 isSessionComplete = true
             }
@@ -116,6 +134,7 @@ final class SessionStore: ObservableObject {
 
     private func saveCount() {
         defaults.set(count, forKey: Keys.count)
+        defaults.set(Date(), forKey: Keys.countDate)
     }
 
     func saveReminderSettings() {

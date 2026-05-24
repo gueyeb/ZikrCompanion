@@ -5,9 +5,13 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var store: SessionStore
     @State private var showNiyya: Bool = false
+    @State private var niyyaIsEnforced: Bool = false
+    @State private var niyyaAcknowledged: Bool = false
     @State private var activeTab: Tab = .counter
+    @State private var counterMode: CounterMode = .tap
 
     enum Tab { case counter, settings }
+    enum CounterMode { case tap, scroll }
 
     var body: some View {
         ZStack {
@@ -32,10 +36,14 @@ struct ContentView: View {
                 .tint(AppTheme.gold)
             }
         }
-        .sheet(isPresented: $showNiyya) {
+        .sheet(isPresented: $showNiyya, onDismiss: {
+            if niyyaIsEnforced { niyyaAcknowledged = true }
+            niyyaIsEnforced = false
+        }) {
             NiyyaView(isPresented: $showNiyya)
                 .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(niyyaIsEnforced ? .hidden : .visible)
+                .interactiveDismissDisabled(niyyaIsEnforced)
         }
         .task {
             await NotificationManager.shared.rescheduleIfNeeded(store: store)
@@ -45,61 +53,111 @@ struct ContentView: View {
     // MARK: - Counter tab content
 
     private var counterTab: some View {
-        ScrollView {
-            VStack(spacing: AppTheme.paddingL) {
-
-                // Header
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Zikr Companion")
-                            .font(AppTheme.titleFont)
-                            .foregroundStyle(AppTheme.textPrimary)
-                        Text(greeting)
-                            .font(AppTheme.captionFont)
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-                    Spacer()
-                    StreakView(streak: store.streak)
+        Group {
+            if counterMode == .scroll {
+                ZStack(alignment: .bottom) {
+                    ScrollCounterView()
+                    modeToggle.padding(.bottom, AppTheme.paddingXL)
                 }
-                .padding(.horizontal, AppTheme.paddingL)
-                .padding(.top, AppTheme.paddingM)
+            } else {
+                ScrollView {
+                    VStack(spacing: AppTheme.paddingL) {
 
-                // Sélecteur routine
-                RoutineView()
-                    .padding(.horizontal, AppTheme.paddingL)
+                        // Header
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Zikr Companion")
+                                    .font(AppTheme.titleFont)
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                Text(greeting)
+                                    .font(AppTheme.captionFont)
+                                    .foregroundStyle(AppTheme.textSecondary)
+                            }
+                            Spacer()
+                            StreakView(streak: store.streak)
+                        }
+                        .padding(.horizontal, AppTheme.paddingL)
+                        .padding(.top, AppTheme.paddingM)
 
-                // Compteur
-                CounterView()
-                    .padding(.vertical, AppTheme.paddingM)
-
-                // ZikrCards
-                if !zikrItems.isEmpty {
-                    VStack(alignment: .leading, spacing: AppTheme.paddingS) {
-                        Text("Formules")
-                            .font(AppTheme.captionFont)
-                            .foregroundStyle(AppTheme.textSecondary)
+                        // Sélecteur routine
+                        RoutineView()
                             .padding(.horizontal, AppTheme.paddingL)
 
-                        ForEach(zikrItems) { item in
-                            ZikrCardView(item: item)
-                                .padding(.horizontal, AppTheme.paddingL)
+                        // Compteur
+                        CounterView()
+                            .padding(.vertical, AppTheme.paddingM)
+
+                        // ZikrCards
+                        if !zikrItems.isEmpty {
+                            VStack(alignment: .leading, spacing: AppTheme.paddingS) {
+                                Text("Formules")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundStyle(AppTheme.textSecondary)
+                                    .padding(.horizontal, AppTheme.paddingL)
+
+                                ForEach(zikrItems) { item in
+                                    ZikrCardView(item: item)
+                                        .padding(.horizontal, AppTheme.paddingL)
+                                }
+                            }
                         }
+
+                        // Bottom controls
+                        HStack(spacing: AppTheme.paddingL) {
+                            // Niyya button (voluntary reminder mid-session)
+                            Button {
+                                niyyaIsEnforced = false
+                                showNiyya = true
+                            } label: {
+                                Label("Intention", systemImage: "heart")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundStyle(AppTheme.textSecondary)
+                            }
+
+                            modeToggle
+                        }
+                        .padding(.bottom, AppTheme.paddingXL)
                     }
                 }
-
-                // Niyya button
-                Button {
-                    showNiyya = true
-                } label: {
-                    Label("Intention", systemImage: "heart")
-                        .font(AppTheme.captionFont)
-                        .foregroundStyle(AppTheme.textSecondary)
-                }
-                .padding(.bottom, AppTheme.paddingXL)
+                .background(AppTheme.background)
+                .scrollIndicators(.hidden)
             }
         }
-        .background(AppTheme.background)
-        .scrollIndicators(.hidden)
+        .onAppear {
+            if store.count == 0 && !niyyaAcknowledged {
+                niyyaIsEnforced = true
+                showNiyya = true
+            }
+        }
+        .onChange(of: store.count) { _, newCount in
+            if newCount == 0 {
+                niyyaAcknowledged = false
+                niyyaIsEnforced = true
+                showNiyya = true
+            }
+        }
+    }
+
+    // MARK: - Mode toggle
+
+    private var modeToggle: some View {
+        HStack(spacing: 2) {
+            Button { counterMode = .tap } label: {
+                Image(systemName: "hand.tap.fill")
+                    .foregroundStyle(counterMode == .tap ? AppTheme.gold : AppTheme.textSecondary.opacity(0.4))
+                    .padding(.horizontal, AppTheme.paddingS)
+                    .padding(.vertical, 6)
+            }
+            Button { counterMode = .scroll } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .foregroundStyle(counterMode == .scroll ? AppTheme.gold : AppTheme.textSecondary.opacity(0.4))
+                    .padding(.horizontal, AppTheme.paddingS)
+                    .padding(.vertical, 6)
+            }
+        }
+        .font(.system(size: 16))
+        .background(AppTheme.surface)
+        .clipShape(Capsule())
     }
 
     // MARK: - Helpers
