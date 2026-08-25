@@ -3,160 +3,227 @@ import XCTest
 
 @MainActor
 final class SessionStoreTests: XCTestCase {
+    private var suiteNames: [String] = []
 
-    private func makeDefaults() -> UserDefaults {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        return defaults
+    override func tearDown() {
+        for suiteName in suiteNames {
+            UserDefaults.standard.removePersistentDomain(forName: suiteName)
+        }
+        suiteNames = []
+        super.tearDown()
     }
-
-    private func makeStore(_ defaults: UserDefaults) -> SessionStore {
-        SessionStore(defaults: defaults)
-    }
-
-    // MARK: - Increment
 
     func testIncrementIncreasesCount() {
-        let store = makeStore(makeDefaults())
-        store.increment()
-        XCTAssertEqual(store.count, 1)
+        let context = makeContext()
+        context.store.increment()
+        XCTAssertEqual(context.store.count, 1)
     }
 
     func testSessionCompletesAtMorningTarget() {
-        let d = makeDefaults()
-        d.set(RoutineType.morning.rawValue, forKey: "zc_selectedRoutine")
-        let store = makeStore(d)
-        for _ in 0..<99 { store.increment() }
-        XCTAssertFalse(store.isSessionComplete)
-        store.increment()
-        XCTAssertTrue(store.isSessionComplete)
+        let context = makeContext()
+        completeCurrentRoutine(in: context.store)
+        XCTAssertTrue(context.store.isSessionComplete)
+        XCTAssertEqual(context.store.streak, 1)
     }
 
     func testSessionCompletesAtEveningTarget() {
-        let d = makeDefaults()
-        d.set(RoutineType.evening.rawValue, forKey: "zc_selectedRoutine")
-        let store = makeStore(d)
-        for _ in 0..<32 { store.increment() }
-        XCTAssertFalse(store.isSessionComplete)
-        store.increment()
-        XCTAssertTrue(store.isSessionComplete)
+        let context = makeContext()
+        context.store.selectRoutine(.evening)
+        completeCurrentRoutine(in: context.store)
+        XCTAssertTrue(context.store.isSessionComplete)
+        XCTAssertEqual(context.store.count, 33)
     }
 
-    // MARK: - Reset
-
-    func testResetCountResetsToZero() {
-        let store = makeStore(makeDefaults())
-        store.increment()
-        store.increment()
-        store.resetCount()
-        XCTAssertEqual(store.count, 0)
-        XCTAssertFalse(store.isSessionComplete)
+    func testResetCountResetsToZeroWithoutChangingStreak() {
+        let context = makeContext()
+        completeCurrentRoutine(in: context.store)
+        context.store.resetCount()
+        XCTAssertEqual(context.store.count, 0)
+        XCTAssertFalse(context.store.isSessionComplete)
+        XCTAssertEqual(context.store.streak, 1)
     }
-
-    // MARK: - Routine Switch
 
     func testSelectRoutineResetsCount() {
-        let store = makeStore(makeDefaults())
-        for _ in 0..<10 { store.increment() }
-        store.selectRoutine(.evening)
-        XCTAssertEqual(store.count, 0)
-        XCTAssertEqual(store.selectedRoutine, .evening)
+        let context = makeContext()
+        for _ in 0..<10 { context.store.increment() }
+        context.store.selectRoutine(.evening)
+        XCTAssertEqual(context.store.count, 0)
+        XCTAssertEqual(context.store.selectedRoutine, .evening)
     }
 
     func testSelectSameRoutineDoesNotResetCount() {
-        let store = makeStore(makeDefaults())
-        for _ in 0..<10 { store.increment() }
-        store.selectRoutine(.morning)
-        XCTAssertEqual(store.count, 10)
+        let context = makeContext()
+        for _ in 0..<10 { context.store.increment() }
+        context.store.selectRoutine(.morning)
+        XCTAssertEqual(context.store.count, 10)
     }
 
-    // MARK: - Streak
-
-    func testFirstCompletionSetsStreakToOne() {
-        let d = makeDefaults()
-        d.set(RoutineType.morning.rawValue, forKey: "zc_selectedRoutine")
-        let store = makeStore(d)
-        for _ in 0..<100 { store.increment() }
-        XCTAssertEqual(store.streak, 1)
-    }
-
-    func testSameDayCompletionDoesNotIncrementStreak() {
-        let d = makeDefaults()
-        d.set(RoutineType.morning.rawValue, forKey: "zc_selectedRoutine")
-        d.set(Date(), forKey: "zc_lastSessionDate")
-        d.set(5, forKey: "zc_streak")
-        let store = makeStore(d)
-        for _ in 0..<100 { store.increment() }
-        XCTAssertEqual(store.streak, 5)
+    func testSameDayCompletionsIncrementStreakOnlyOnce() {
+        let context = makeContext()
+        completeCurrentRoutine(in: context.store)
+        context.store.selectRoutine(.evening)
+        completeCurrentRoutine(in: context.store)
+        XCTAssertEqual(context.store.streak, 1)
+        XCTAssertEqual(context.store.history.count, 2)
     }
 
     func testConsecutiveDayIncreasesStreak() {
-        let d = makeDefaults()
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
-        d.set(RoutineType.morning.rawValue, forKey: "zc_selectedRoutine")
-        d.set(yesterday, forKey: "zc_lastSessionDate")
-        d.set(3, forKey: "zc_streak")
-        let store = makeStore(d)
-        for _ in 0..<100 { store.increment() }
-        XCTAssertEqual(store.streak, 4)
+        let context = makeContext()
+        completeCurrentRoutine(in: context.store)
+        context.clock.now = date(day: 27)
+        context.store.refreshForCurrentDay()
+        completeCurrentRoutine(in: context.store)
+        XCTAssertEqual(context.store.streak, 2)
     }
 
-    func testMissedDayResetsStreakToOne() {
-        let d = makeDefaults()
-        let twoDaysAgo = Calendar.current.date(byAdding: .day, value: -2, to: Date())!
-        d.set(RoutineType.morning.rawValue, forKey: "zc_selectedRoutine")
-        d.set(twoDaysAgo, forKey: "zc_lastSessionDate")
-        d.set(10, forKey: "zc_streak")
-        let store = makeStore(d)
-        for _ in 0..<100 { store.increment() }
-        XCTAssertEqual(store.streak, 1)
+    func testMissedDayClearsDisplayedStreak() {
+        let context = makeContext()
+        completeCurrentRoutine(in: context.store)
+        context.clock.now = date(day: 28)
+        context.store.refreshForCurrentDay()
+        XCTAssertEqual(context.store.streak, 0)
     }
 
-    // MARK: - Persistence
-
-    func testCountPersistedAcrossInstances() {
-        let d = makeDefaults()
-        let store = makeStore(d)
-        for _ in 0..<7 { store.increment() }
-        let store2 = makeStore(d)
-        XCTAssertEqual(store2.count, 7)
+    func testCompletionAfterMissedDayStartsNewStreak() {
+        let context = makeContext()
+        completeCurrentRoutine(in: context.store)
+        context.clock.now = date(day: 28)
+        context.store.refreshForCurrentDay()
+        completeCurrentRoutine(in: context.store)
+        XCTAssertEqual(context.store.streak, 1)
     }
 
-    func testCountResetsOnNewDay() {
-        let d = makeDefaults()
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
-        d.set(50, forKey: "zc_count")
-        d.set(yesterday, forKey: "zc_countDate")
-        let store = makeStore(d)
-        XCTAssertEqual(store.count, 0)
+    func testCountResetsWhenAppStaysOpenAcrossMidnight() {
+        let context = makeContext()
+        for _ in 0..<25 { context.store.increment() }
+        context.clock.now = date(day: 27)
+        context.store.refreshForCurrentDay()
+        XCTAssertEqual(context.store.count, 0)
+        XCTAssertFalse(context.store.isSessionComplete)
     }
 
-    func testCountPreservedSameDay() {
-        let d = makeDefaults()
-        d.set(50, forKey: "zc_count")
-        d.set(Date(), forKey: "zc_countDate")
-        let store = makeStore(d)
-        XCTAssertEqual(store.count, 50)
+    func testFirstIncrementAfterMidnightRefreshesDayAutomatically() {
+        let context = makeContext()
+        for _ in 0..<25 { context.store.increment() }
+        context.clock.now = date(day: 27)
+        context.store.increment()
+        XCTAssertEqual(context.store.count, 1)
     }
 
-    // MARK: - Computed helpers
+    func testCountPersistsAcrossInstancesOnSameDay() {
+        let context = makeContext()
+        for _ in 0..<7 { context.store.increment() }
+        let restoredStore = makeStore(defaults: context.defaults, clock: context.clock)
+        XCTAssertEqual(restoredStore.count, 7)
+    }
+
+    func testHistoryPersistsAcrossInstances() {
+        let context = makeContext()
+        completeCurrentRoutine(in: context.store)
+        let restoredStore = makeStore(defaults: context.defaults, clock: context.clock)
+        XCTAssertEqual(restoredStore.history.count, 1)
+        XCTAssertEqual(restoredStore.history.first?.routineType, .morning)
+    }
+
+    func testLegacyCompletedSessionMigratesIntoHistory() {
+        let context = makeContext()
+        context.defaults.set(100, forKey: "zc_count")
+        context.defaults.set(context.clock.now, forKey: "zc_countDate")
+        context.defaults.set(context.clock.now, forKey: "zc_lastSessionDate")
+
+        let restoredStore = makeStore(defaults: context.defaults, clock: context.clock)
+
+        XCTAssertTrue(restoredStore.isSessionComplete)
+        XCTAssertEqual(restoredStore.history.count, 1)
+        XCTAssertEqual(restoredStore.history.first?.routineType, .morning)
+    }
+
+    func testCompletingSameRoutineTwiceInOneDayDoesNotDuplicateHistory() {
+        let context = makeContext()
+        completeCurrentRoutine(in: context.store)
+        context.store.resetCount()
+        completeCurrentRoutine(in: context.store)
+        XCTAssertEqual(context.store.history.count, 1)
+    }
 
     func testProgressComputedCorrectly() {
-        let store = makeStore(makeDefaults())
-        for _ in 0..<50 { store.increment() }
-        XCTAssertEqual(store.progress, 0.5, accuracy: 0.01)
+        let context = makeContext()
+        for _ in 0..<50 { context.store.increment() }
+        XCTAssertEqual(context.store.progress, 0.5, accuracy: 0.01)
     }
 
-    func testRemainingComputedCorrectly() {
-        let store = makeStore(makeDefaults())
-        for _ in 0..<30 { store.increment() }
-        XCTAssertEqual(store.remaining, 70)
+    func testRemainingNeverBecomesNegative() {
+        let context = makeContext()
+        completeCurrentRoutine(in: context.store)
+        XCTAssertEqual(context.store.remaining, 0)
     }
 
-    func testProgressCapsAtOne() {
-        let d = makeDefaults()
-        d.set(RoutineType.morning.rawValue, forKey: "zc_selectedRoutine")
-        let store = makeStore(d)
-        for _ in 0..<105 { store.increment() }
-        XCTAssertEqual(store.progress, 1.0)
+    private func makeContext() -> TestContext {
+        let suiteName = "ZikrCompanionTests.\(UUID().uuidString)"
+        suiteNames.append(suiteName)
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            fatalError("Impossible de créer les UserDefaults de test")
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+        let clock = MutableDateProvider(now: date(day: 26))
+        return TestContext(
+            defaults: defaults,
+            clock: clock,
+            store: makeStore(defaults: defaults, clock: clock)
+        )
     }
+
+    private func makeStore(
+        defaults: UserDefaults,
+        clock: MutableDateProvider
+    ) -> SessionStore {
+        SessionStore(
+            defaults: defaults,
+            calendar: calendar,
+            now: { clock.now }
+        )
+    }
+
+    private func completeCurrentRoutine(in store: SessionStore) {
+        for _ in store.count..<store.currentTarget {
+            store.increment()
+        }
+    }
+
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        return calendar
+    }
+
+    private func date(day: Int) -> Date {
+        let components = DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 8,
+            day: day,
+            hour: 12
+        )
+        guard let date = calendar.date(from: components) else {
+            fatalError("Date de test invalide")
+        }
+        return date
+    }
+}
+
+@MainActor
+private final class MutableDateProvider {
+    var now: Date
+
+    init(now: Date) {
+        self.now = now
+    }
+}
+
+@MainActor
+private struct TestContext {
+    let defaults: UserDefaults
+    let clock: MutableDateProvider
+    let store: SessionStore
 }

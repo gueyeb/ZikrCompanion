@@ -14,13 +14,8 @@ final class NotificationManager {
 
     // MARK: - Permission
 
-    func requestAuthorization() async -> Bool {
-        do {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-            return granted
-        } catch {
-            return false
-        }
+    func requestAuthorization() async throws -> Bool {
+        try await center.requestAuthorization(options: [.alert, .sound])
     }
 
     func authorizationStatus() async -> UNAuthorizationStatus {
@@ -31,7 +26,7 @@ final class NotificationManager {
     // MARK: - Schedule
 
     /// Planifie (ou remplace) un rappel quotidien à l'heure donnée.
-    func scheduleDailyReminder(hour: Int, minute: Int) async {
+    func scheduleDailyReminder(hour: Int, minute: Int) async throws {
         // Retire l'ancien
         center.removePendingNotificationRequests(withIdentifiers: [reminderIdentifier])
 
@@ -52,11 +47,7 @@ final class NotificationManager {
             trigger: trigger
         )
 
-        do {
-            try await center.add(request)
-        } catch {
-            print("NotificationManager — erreur scheduling: \(error)")
-        }
+        try await center.add(request)
     }
 
     /// Annule le rappel quotidien.
@@ -69,6 +60,6 @@ final class NotificationManager {
         guard store.isReminderEnabled else { return }
         let status = await authorizationStatus()
         guard status == .authorized else { return }
-        await scheduleDailyReminder(hour: store.reminderHour, minute: store.reminderMinute)
+        try? await scheduleDailyReminder(hour: store.reminderHour, minute: store.reminderMinute)
     }
 }

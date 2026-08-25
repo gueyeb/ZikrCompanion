@@ -16,8 +16,8 @@ enum AppTheme {
     static let headlineFont = Font.system(.headline, design: .rounded).weight(.medium)
     static let bodyFont     = Font.system(.body, design: .rounded)
     static let captionFont  = Font.system(.caption, design: .rounded)
-    static let counterFont  = Font.system(size: 72, weight: .thin, design: .rounded)
-    static let arabicFont   = Font.system(size: 28, weight: .regular, design: .default)
+    static let counterFont  = Font.system(.largeTitle, design: .rounded).weight(.light)
+    static let arabicFont   = Font.system(.title2, design: .default)
 
     // MARK: - Spacing
     static let paddingS: CGFloat  = 8

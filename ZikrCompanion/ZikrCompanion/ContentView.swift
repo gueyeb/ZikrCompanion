@@ -10,32 +10,36 @@ struct ContentView: View {
     @State private var activeTab: Tab = .counter
     @State private var counterMode: CounterMode = .tap
 
-    enum Tab { case counter, settings }
+    enum Tab { case counter, history, settings }
     enum CounterMode { case tap, scroll }
 
     var body: some View {
-        ZStack {
-            AppTheme.background.ignoresSafeArea()
+        TabView(selection: $activeTab) {
+            NavigationStack {
+                counterTab
+            }
+            .tabItem {
+                Label("Zikr", systemImage: "circle.grid.3x3.fill")
+            }
+            .tag(Tab.counter)
 
             NavigationStack {
-                TabView(selection: $activeTab) {
-                    // MARK: Counter tab
-                    counterTab
-                        .tabItem {
-                            Label("Zikr", systemImage: "circle.grid.3x3.fill")
-                        }
-                        .tag(Tab.counter)
-
-                    // MARK: Settings tab
-                    SettingsView()
-                        .tabItem {
-                            Label("Paramètres", systemImage: "gearshape")
-                        }
-                        .tag(Tab.settings)
-                }
-                .tint(AppTheme.gold)
+                HistoryView()
             }
+            .tabItem {
+                Label("Historique", systemImage: "clock.arrow.circlepath")
+            }
+            .tag(Tab.history)
+
+            NavigationStack {
+                SettingsView()
+            }
+            .tabItem {
+                Label("Paramètres", systemImage: "gearshape")
+            }
+            .tag(Tab.settings)
         }
+        .tint(AppTheme.gold)
         .sheet(isPresented: $showNiyya, onDismiss: {
             if niyyaIsEnforced { niyyaAcknowledged = true }
             niyyaIsEnforced = false
@@ -65,6 +69,13 @@ struct ContentView: View {
 
                         // Header
                         HStack {
+                            Image("BrandMark")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 44, height: 44)
+                                .clipShape(.rect(cornerRadius: AppTheme.radiusS))
+                                .accessibilityHidden(true)
+
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Zikr Companion")
                                     .font(AppTheme.titleFont)
@@ -124,13 +135,14 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            guard activeTab == .counter else { return }
             if store.count == 0 && !niyyaAcknowledged {
                 niyyaIsEnforced = true
                 showNiyya = true
             }
         }
         .onChange(of: store.count) { _, newCount in
-            if newCount == 0 {
+            if newCount == 0 && activeTab == .counter {
                 niyyaAcknowledged = false
                 niyyaIsEnforced = true
                 showNiyya = true
@@ -143,17 +155,19 @@ struct ContentView: View {
     private var modeToggle: some View {
         HStack(spacing: 2) {
             Button { counterMode = .tap } label: {
-                Image(systemName: "hand.tap.fill")
+                Label("Mode tactile", systemImage: "hand.tap.fill")
+                    .labelStyle(.iconOnly)
                     .foregroundStyle(counterMode == .tap ? AppTheme.gold : AppTheme.textSecondary.opacity(0.4))
-                    .padding(.horizontal, AppTheme.paddingS)
-                    .padding(.vertical, 6)
+                    .frame(minWidth: 44, minHeight: 44)
             }
+            .accessibilityAddTraits(counterMode == .tap ? .isSelected : [])
             Button { counterMode = .scroll } label: {
-                Image(systemName: "arrow.up.arrow.down")
+                Label("Mode chapelet", systemImage: "arrow.up.arrow.down")
+                    .labelStyle(.iconOnly)
                     .foregroundStyle(counterMode == .scroll ? AppTheme.gold : AppTheme.textSecondary.opacity(0.4))
-                    .padding(.horizontal, AppTheme.paddingS)
-                    .padding(.vertical, 6)
+                    .frame(minWidth: 44, minHeight: 44)
             }
+            .accessibilityAddTraits(counterMode == .scroll ? .isSelected : [])
         }
         .font(.system(size: 16))
         .background(AppTheme.surface)
@@ -170,7 +184,7 @@ struct ContentView: View {
     }
 
     private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
+        let hour = Calendar.current.component(.hour, from: .now)
         switch hour {
         case 5..<12:  return "Assalam aleykum 🌅"
         case 12..<18: return "Bon après-midi ☀️"

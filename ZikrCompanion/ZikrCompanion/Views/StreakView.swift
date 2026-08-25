@@ -12,16 +12,9 @@ struct StreakView: View {
                 .font(.system(size: 18, weight: .semibold))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(streak)")
-                    .font(AppTheme.headlineFont)
+                Text("^[\(streak) jour consécutif](inflect: true)")
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(streak > 0 ? AppTheme.gold : AppTheme.textSecondary)
-                    + Text(streak == 1 ? " jour" : " jours")
-                    .font(AppTheme.captionFont)
-                    .foregroundStyle(AppTheme.textSecondary)
-
-                Text("consécutif\(streak > 1 ? "s" : "")")
-                    .font(AppTheme.captionFont)
-                    .foregroundStyle(AppTheme.textSecondary)
             }
         }
         .padding(.horizontal, AppTheme.paddingM)
@@ -36,6 +29,8 @@ struct StreakView: View {
                 )
         )
         .animation(.easeInOut(duration: 0.3), value: streak)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Série de \(streak) jours consécutifs")
     }
 }
 

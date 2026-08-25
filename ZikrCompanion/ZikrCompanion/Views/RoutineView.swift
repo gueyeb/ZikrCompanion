@@ -17,7 +17,9 @@ struct RoutineView: View {
         }
         .padding(4)
         .background(AppTheme.surfaceAlt)
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusM))
+        .clipShape(.rect(cornerRadius: AppTheme.radiusM))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Choix de la routine")
     }
 }
 
@@ -46,6 +48,8 @@ private struct RoutineTabButton: View {
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusS + 2))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Routine du \(routine.displayName.lowercased()), objectif \(routine.target)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
 }

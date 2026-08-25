@@ -4,8 +4,11 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var store: SessionStore
+    @Environment(\.openURL) private var openURL
     @State private var reminderTime: Date = .now
     @State private var permissionDenied = false
+    @State private var notificationErrorMessage = ""
+    @State private var isShowingNotificationError = false
 
     var body: some View {
         ZStack {
@@ -14,14 +17,14 @@ struct SettingsView: View {
             List {
                 // MARK: Rappel
                 Section {
-                    Toggle(isOn: Binding(
-                        get: { store.isReminderEnabled },
-                        set: { toggleReminder($0) }
-                    )) {
+                    Toggle(isOn: $store.isReminderEnabled) {
                         Label("Rappel quotidien", systemImage: "bell.fill")
                             .foregroundStyle(AppTheme.textPrimary)
                     }
                     .tint(AppTheme.gold)
+                    .onChange(of: store.isReminderEnabled) { _, enabled in
+                        Task { await toggleReminder(enabled) }
+                    }
 
                     if store.isReminderEnabled {
                         DatePicker(
@@ -72,40 +75,47 @@ struct SettingsView: View {
             .navigationTitle("Paramètres")
             .navigationBarTitleDisplayMode(.large)
         }
-        .onAppear { syncReminderTime() }
+        .onAppear(perform: syncReminderTime)
         .alert("Notifications désactivées", isPresented: $permissionDenied) {
             Button("Ouvrir Réglages") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
+                    openURL(url)
                 }
             }
             Button("Annuler", role: .cancel) {}
         } message: {
             Text("Active les notifications pour Zikr Companion dans les Réglages de ton iPhone.")
         }
+        .alert("Rappel non enregistré", isPresented: $isShowingNotificationError) {
+        } message: {
+            Text(notificationErrorMessage)
+        }
     }
 
     // MARK: - Helpers
 
-    private func toggleReminder(_ enabled: Bool) {
-        Task { @MainActor in
-            if enabled {
-                let granted = await NotificationManager.shared.requestAuthorization()
-                if granted {
-                    store.isReminderEnabled = true
-                    store.saveReminderSettings()
-                    await NotificationManager.shared.scheduleDailyReminder(
-                        hour: store.reminderHour,
-                        minute: store.reminderMinute
-                    )
-                } else {
+    private func toggleReminder(_ enabled: Bool) async {
+        if enabled {
+            do {
+                let granted = try await NotificationManager.shared.requestAuthorization()
+                guard granted else {
+                    store.isReminderEnabled = false
                     permissionDenied = true
+                    return
                 }
-            } else {
+                try await NotificationManager.shared.scheduleDailyReminder(
+                    hour: store.reminderHour,
+                    minute: store.reminderMinute
+                )
+                store.saveReminderSettings()
+            } catch {
                 store.isReminderEnabled = false
                 store.saveReminderSettings()
-                NotificationManager.shared.cancelDailyReminder()
+                showNotificationError(error)
             }
+        } else {
+            store.saveReminderSettings()
+            NotificationManager.shared.cancelDailyReminder()
         }
     }
 
@@ -114,11 +124,16 @@ struct SettingsView: View {
         store.reminderHour   = comps.hour ?? 7
         store.reminderMinute = comps.minute ?? 0
         store.saveReminderSettings()
+        guard store.isReminderEnabled else { return }
         Task {
-            await NotificationManager.shared.scheduleDailyReminder(
-                hour: store.reminderHour,
-                minute: store.reminderMinute
-            )
+            do {
+                try await NotificationManager.shared.scheduleDailyReminder(
+                    hour: store.reminderHour,
+                    minute: store.reminderMinute
+                )
+            } catch {
+                showNotificationError(error)
+            }
         }
     }
 
@@ -131,6 +146,11 @@ struct SettingsView: View {
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+
+    private func showNotificationError(_ error: Error) {
+        notificationErrorMessage = error.localizedDescription
+        isShowingNotificationError = true
     }
 }
 

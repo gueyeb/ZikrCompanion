@@ -1,43 +1,48 @@
 import SwiftUI
 
-// MARK: - CounterView
-
 struct CounterView: View {
     @EnvironmentObject private var store: SessionStore
-    @State private var isPressed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .largeTitle) private var ringSize = 200.0
+    @ScaledMetric(relativeTo: .title) private var actionSize = 80.0
     @State private var showCompletion = false
+    @State private var feedbackTrigger = 0
+    @State private var dismissalTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: AppTheme.paddingL) {
-            // Anneau de progression
             progressRing
+            incrementButton
 
-            // Compteur principal
-            counterLabel
-
-            // Bouton tap
-            tapButton
-
-            // Remaining hint
             if !store.isSessionComplete {
-                Text("\(store.remaining) restant\(store.remaining > 1 ? "s" : "")")
+                Text("^[\(store.remaining) répétition restante](inflect: true)")
                     .font(AppTheme.captionFont)
-                    .foregroundStyle(AppTheme.textSecondary)
+                    .foregroundStyle(.secondary)
             }
         }
         .onChange(of: store.isSessionComplete) { _, completed in
-            if completed { showCompletion = true }
+            guard completed else { return }
+            presentCompletion()
         }
-        .overlay(completionOverlay)
+        .overlay {
+            if showCompletion {
+                SessionCompletionBanner {
+                    dismissCompletion()
+                }
+                .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
+            }
+        }
+        .onDisappear {
+            dismissalTask?.cancel()
+        }
     }
 
-    // MARK: - Subviews
-
     private var progressRing: some View {
-        ZStack {
+        let diameter = min(ringSize, 240)
+
+        return ZStack {
             Circle()
                 .stroke(AppTheme.divider, lineWidth: 6)
-                .frame(width: 200, height: 200)
 
             Circle()
                 .trim(from: 0, to: store.progress)
@@ -45,94 +50,71 @@ struct CounterView: View {
                     store.isSessionComplete ? AppTheme.success : AppTheme.gold,
                     style: StrokeStyle(lineWidth: 6, lineCap: .round)
                 )
-                .frame(width: 200, height: 200)
                 .rotationEffect(.degrees(-90))
-                .animation(.easeInOut(duration: 0.3), value: store.progress)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: store.progress)
 
-            // Compteur centré dans l'anneau
             VStack(spacing: 2) {
-                Text("\(store.count)")
+                Text(store.count, format: .number)
                     .font(AppTheme.counterFont)
                     .foregroundStyle(AppTheme.textPrimary)
-                    .contentTransition(.numericText())
-                    .animation(.easeOut(duration: 0.15), value: store.count)
+                    .contentTransition(reduceMotion ? .identity : .numericText())
 
-                Text("/ \(store.currentTarget)")
+                Text(store.currentTarget, format: .number)
                     .font(AppTheme.captionFont)
-                    .foregroundStyle(AppTheme.textSecondary)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Objectif \(store.currentTarget)")
             }
         }
+        .frame(width: diameter, height: diameter)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Progression")
+        .accessibilityValue("\(store.count) sur \(store.currentTarget)")
     }
 
-    private var counterLabel: some View {
-        EmptyView() // Compteur déjà dans l'anneau
-    }
-
-    private var tapButton: some View {
-        Button {
-            guard !store.isSessionComplete else { return }
-            store.increment()
-            impactFeedback()
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(store.isSessionComplete ? AppTheme.success : AppTheme.gold)
-                    .frame(width: 80, height: 80)
-                    .shadow(
-                        color: (store.isSessionComplete ? AppTheme.success : AppTheme.gold).opacity(0.4),
-                        radius: isPressed ? 4 : 16,
-                        y: isPressed ? 2 : 8
-                    )
-
-                Image(systemName: store.isSessionComplete ? "checkmark" : "plus")
-                    .font(.system(size: 28, weight: .medium))
-                    .foregroundStyle(AppTheme.background)
-            }
-            .scaleEffect(isPressed ? 0.93 : 1.0)
-        }
-        .buttonStyle(.plain)
-        .disabled(store.isSessionComplete)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in withAnimation(.easeOut(duration: 0.1)) { isPressed = true } }
-                .onEnded   { _ in withAnimation(.spring(duration: 0.3)) { isPressed = false } }
+    private var incrementButton: some View {
+        Button(
+            store.isSessionComplete ? "Session terminée" : "Ajouter une répétition",
+            systemImage: store.isSessionComplete ? "checkmark" : "plus",
+            action: increment
         )
+        .labelStyle(.iconOnly)
+        .font(.title2)
+        .foregroundStyle(AppTheme.background)
+        .frame(width: max(actionSize, 64), height: max(actionSize, 64))
+        .background(store.isSessionComplete ? AppTheme.success : AppTheme.gold)
+        .clipShape(.circle)
+        .shadow(
+            color: (store.isSessionComplete ? AppTheme.success : AppTheme.gold).opacity(0.35),
+            radius: 12,
+            y: 6
+        )
+        .disabled(store.isSessionComplete)
+        .sensoryFeedback(.impact(weight: .light), trigger: feedbackTrigger)
+        .accessibilityValue("\(store.count) sur \(store.currentTarget)")
     }
 
-    @ViewBuilder
-    private var completionOverlay: some View {
-        if showCompletion {
-            VStack(spacing: AppTheme.paddingM) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(AppTheme.success)
+    private func increment() {
+        store.increment()
+        feedbackTrigger += 1
+    }
 
-                Text("بَارَكَ اللهُ فِيكَ")
-                    .font(AppTheme.arabicFont)
-                    .foregroundStyle(AppTheme.gold)
-
-                Text("Session complète !")
-                    .font(AppTheme.headlineFont)
-                    .foregroundStyle(AppTheme.textPrimary)
-            }
-            .padding(AppTheme.paddingXL)
-            .background(AppTheme.surface.opacity(0.97))
-            .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusL))
-            .transition(.scale.combined(with: .opacity))
-            .onTapGesture { withAnimation { showCompletion = false } }
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                    withAnimation { showCompletion = false }
-                }
-            }
+    private func presentCompletion() {
+        dismissalTask?.cancel()
+        withAnimation(reduceMotion ? nil : .easeInOut) {
+            showCompletion = true
+        }
+        dismissalTask = Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            dismissCompletion()
         }
     }
 
-    // MARK: - Haptic
-
-    private func impactFeedback() {
-        let gen = UIImpactFeedbackGenerator(style: .light)
-        gen.impactOccurred()
+    private func dismissCompletion() {
+        dismissalTask?.cancel()
+        withAnimation(reduceMotion ? nil : .easeInOut) {
+            showCompletion = false
+        }
     }
 }
 

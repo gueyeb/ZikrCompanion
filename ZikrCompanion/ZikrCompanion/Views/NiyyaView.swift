@@ -14,13 +14,15 @@ struct NiyyaView: View {
 
                 // Icône
                 Image(systemName: "heart.fill")
-                    .font(.system(size: 56))
+                    .font(.largeTitle)
                     .foregroundStyle(AppTheme.gold)
+                    .accessibilityHidden(true)
 
                 // Titre arabic
                 Text("نِيَّة")
-                    .font(.system(size: 48, weight: .thin, design: .default))
+                    .font(.system(.largeTitle, design: .default).weight(.light))
                     .foregroundStyle(AppTheme.gold)
+                    .environment(\.layoutDirection, .rightToLeft)
 
                 Text("Intention")
                     .font(AppTheme.titleFont)
@@ -48,6 +50,7 @@ struct NiyyaView: View {
                         .background(AppTheme.gold)
                         .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusM))
                 }
+                .accessibilityHint("Ferme l'écran d'intention et ouvre le compteur")
                 .padding(.horizontal, AppTheme.paddingL)
                 .padding(.bottom, AppTheme.paddingXL)
             }

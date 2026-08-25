@@ -13,6 +13,7 @@ struct ZikrCardView: View {
                 .foregroundStyle(AppTheme.gold)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .multilineTextAlignment(.trailing)
+                .environment(\.layoutDirection, .rightToLeft)
 
             Divider()
                 .background(AppTheme.divider)
@@ -25,7 +26,7 @@ struct ZikrCardView: View {
 
                 Text(item.translation)
                     .font(AppTheme.captionFont)
-                    .foregroundStyle(AppTheme.textSecondary.opacity(0.7))
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(AppTheme.paddingM)
@@ -35,6 +36,8 @@ struct ZikrCardView: View {
             RoundedRectangle(cornerRadius: AppTheme.radiusM)
                 .stroke(AppTheme.divider, lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.transliteration). \(item.translation)")
     }
 }
 

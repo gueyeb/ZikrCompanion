@@ -14,13 +14,14 @@ Assistant personnel de constance — pas un transmetteur de wird, pas un substit
 - Écran d'intention (Niyya) avant la session
 - **Rappel local quotidien** configurable (heure libre)
 - Persistance offline via UserDefaults — zéro backend
+- Historique local des sessions terminées, séparé par routine
 - Cartes de formules arabic/translitération/traduction
 
 ## Stack
 
 | Couche | Choix |
 |---|---|
-| UI | SwiftUI (iOS 17+) |
+| UI | SwiftUI (iOS 17+, Swift 6) |
 | State | `ObservableObject` / `@EnvironmentObject` |
 | Persistance | `UserDefaults` |
 | Notifications | `UserNotifications` (local uniquement) |
@@ -35,6 +36,7 @@ ZikrCompanion/
   ContentView.swift       ← TabView root (Counter + Paramètres)
   Models/
     ZikrItem.swift        ← struct ZikrItem, enum RoutineType
+    SessionRecord.swift   ← session terminée conservée localement
   Store/
     SessionStore.swift    ← ObservableObject, streak, UserDefaults
   Notifications/
@@ -46,13 +48,25 @@ ZikrCompanion/
     ZikrCardView.swift    ← carte arabic + translitération
     NiyyaView.swift       ← sheet d'intention
     SettingsView.swift    ← rappel + reset
+    HistoryView.swift     ← historique local des routines terminées
 ```
+
+## Vérification
+
+```sh
+xcodebuild -project ZikrCompanion/ZikrCompanion.xcodeproj \
+  -scheme ZikrCompanion \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test
+```
+
+La feuille de route détaillée se trouve dans [`ROADMAP.md`](ROADMAP.md).
 
 ## Phases
 
 | Phase | Périmètre | Statut |
 |---|---|---|
-| **Phase 1** | Discipline solo — build + usage personnel | 🔨 En cours |
+| **Phase 1** | Discipline solo — fiabilité, accessibilité, TestFlight | 🔨 En cours |
 | **Phase 2** | Cercle proche — famille / dahira, feedback réel | ⏳ |
 | **Phase 3** | Extension — contenu validé, partage optionnel | ⏳ |
 
